@@ -79,11 +79,11 @@ Keep content atomic — one fact per call. Include the person's name for attribu
 ## Installation
 
 ```bash
-# Zero-config setup (anonymous device, no signup needed)
-npx memory-mimir init
+# With invite code (closed beta)
+npx memory-mimir init --code XXXXXX
 
 # Or with existing API key
 npx memory-mimir setup --api-key sk-mimir-xxx
 ```
 
-Restart the AI agent after setup. Memory is active immediately.
+Use the same invite code on any device to recover your memory. Restart the AI agent after setup.
