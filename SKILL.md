@@ -166,3 +166,29 @@ Match the user's language. Keep it short. Do NOT repeat onboarding in later conv
 | Store every single thing the user says | Let auto-capture handle it |
 | "Do you want me to remember that?" | If it's important, just remember |
 | Show raw memory entries to the user | Paraphrase and integrate naturally |
+
+---
+
+## 7. Installation
+
+When the user asks you to install Mimir (or provides an invite code), run:
+
+```bash
+npx memory-mimir@latest init --code <INVITE_CODE>
+```
+
+This single command does everything:
+1. Activates the invite code on the server and creates a device key
+2. Installs the plugin to `~/.openclaw/extensions/memory-mimir/`
+3. Writes the config to `~/.openclaw/openclaw.json`
+4. Installs this SKILL to `~/.openclaw/skills/memory-mimir/`
+
+After the command succeeds, tell the user to **restart the AI agent** (restart OpenClaw / restart the chat). Memory will be active on next conversation.
+
+If the user already has an API key (from the dashboard), use:
+
+```bash
+npx memory-mimir@latest setup --api-key <API_KEY>
+```
+
+**Important**: Always use `@latest` to ensure the newest version is installed.
