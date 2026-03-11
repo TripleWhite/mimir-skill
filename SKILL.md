@@ -1,23 +1,67 @@
 ---
 name: mimir-memory
 description: >
-  Long-term memory for AI agents powered by Mimir (knowledge graph + vector + BM25).
-  Use when: (1) The user asks about past conversations, people, events, or preferences,
-  (2) The user says "remember this" or shares important facts to save,
-  (3) The user references something discussed before ("remember when...", "what did I say about..."),
-  (4) The user wants to forget or find stored memories about a topic,
-  (5) Auto-recalled memories are insufficient and a deeper search is needed,
-  (6) The user asks a time-specific question about the past ("last week", "in January").
-  Available tools: mimir_search (active memory lookup), mimir_store (save facts), mimir_forget (preview matching memories).
-  Auto-recall injects basic context automatically — use mimir_search for deeper or broader queries.
+  Long-term memory powered by Mimir. Gives you the ability to remember across conversations.
+  The plugin automatically injects relevant memories as <memories> context and captures conversations after each session.
+  You also have tools to proactively search deeper or store important facts — use them seamlessly without exposing internals to the user.
 ---
 
-# Mimir Memory
+# Mimir Memory — Behavioral Guide
+
+## Core Principle
+
+You have long-term memory. Use it naturally — never say "let me search my memory" or mention tool names (mimir_search, mimir_store) to the user. From the user's perspective, you simply **remember**.
+
+## Understanding Your Memory
+
+### What happens automatically
+
+- **Before each conversation**: Relevant memories appear in a `<memories>` block at the start. These cover recent facts, known entities, and relationships — but NOT full conversation summaries or time-filtered results.
+- **After each conversation**: The full dialogue is automatically saved to memory. You don't need to store what was already said.
+
+### What you control
+
+You have tools to go beyond the automatic basics. Use them proactively based on conversational cues — the user should never have to ask you to search or store.
+
+## When to Proactively Search Deeper
+
+The `<memories>` block covers common cases, but has blind spots. **Proactively search** when you detect these patterns:
+
+| User says something like... | What to do |
+|----------------------------|------------|
+| "还记得我们之前聊的那个项目吗" / "remember when we discussed..." | Search with `memory_types: ["episode"]` — auto-recall doesn't include conversation summaries |
+| "上周我跟你说过..." / "last Tuesday I mentioned..." | Search with time filters (`start_time`/`end_time`) — auto-recall doesn't filter by time |
+| "跟我说说关于 X 的所有信息" / "tell me everything about X" | Search broadly, omit memory_types for widest coverage |
+| You see `<memories>` but they don't answer the user's question | Search with more specific query terms or different memory_types |
+| User asks about a person, place, or relationship | Search with `memory_types: ["entity", "relation"]` |
+| User asks a factual question about the past | Search with `memory_types: ["event_log"]` |
+
+### How to construct good queries
+
+Don't pass the user's raw message as the query. Extract the core topic:
+- User: "还记得上次我跟你说我想换工作的事吗" → query: "换工作 职业规划"
+- User: "Caroline 生日送什么好" → query: "Caroline birthday gift"
+- User: "我们之前讨论的 Chrome 扩展进展怎么样了" → query: "Chrome extension project"
+
+Include names, dates, and topic keywords. Avoid vague queries like "that thing" or "the project".
+
+## When to Store
+
+Auto-capture saves the full conversation after each session. Use explicit storage ONLY for:
+
+- **User explicitly asks**: "记住我不喝咖啡" / "remember that I prefer dark mode"
+- **Critical atomic facts** that might get buried: a decision, a preference, a deadline
+
+Keep each store call atomic — one fact, include the person's name.
+
+Do NOT store:
+- Things the user just said in conversation (auto-capture handles it)
+- Obvious context (auto-capture handles it)
+- Redundant facts already in `<memories>`
 
 ## First Conversation (Onboarding)
 
-If no `<memories>` block is present in this conversation, the user just installed Mimir.
-Welcome them warmly and guide them to try it out. Example response:
+If no `<memories>` block is present, the user just installed Mimir. Welcome them:
 
 ---
 记忆已就绪！我现在可以跨对话记住你告诉我的事情了。
@@ -30,109 +74,20 @@ Welcome them warmly and guide them to try it out. Example response:
 你聊天的重要内容我也会自动捕捉，不用每次都说"记住"。
 ---
 
-Adapt the language to match the user's language. Keep it short and actionable.
-Do NOT repeat this in subsequent conversations where `<memories>` is present.
+Match the user's language. Keep it short. Do NOT repeat this in later conversations where `<memories>` is present.
 
-## How Memory Works
+## How to Use `<memories>` Context
 
-The plugin has two automatic behaviors and three manual tools:
+When `<memories>` is present:
+- Weave relevant memories into your responses naturally — don't list them
+- If the user asks something and the answer is in `<memories>`, just answer — don't say "based on my memory records"
+- If `<memories>` conflicts with what the user just said, trust the user (they may have updated their preference)
+- If `<memories>` is insufficient for the user's question, silently search deeper
 
-### Automatic (no action needed)
+## Anti-patterns (NEVER do these)
 
-- **Auto-recall**: Before each conversation, relevant memories are silently injected as a `<memories>` block. It searches **event_log, entity, and relation** types only, returning up to 15 results. It does NOT search episodes or raw documents.
-- **Auto-capture**: After each conversation ends, new messages are automatically ingested into memory. You do NOT need to manually save everything the user says — important content is captured automatically.
-
-### Manual Tools
-
-- **mimir_search**: Actively search memory. Use when auto-recall is insufficient — especially for episodes, full conversation context, or specific time ranges.
-- **mimir_store**: Save an explicit atomic fact or preference. Use sparingly — auto-capture already handles most content.
-- **mimir_forget**: Preview memories matching a query. NOTE: Actual deletion is not yet supported — this only shows what would be affected.
-
-## When to Use mimir_search (vs relying on auto-recall)
-
-Auto-recall covers basic facts, entities, and relations. Use mimir_search when:
-
-| Scenario | Why auto-recall isn't enough |
-|----------|------------------------------|
-| "Summarize our Chrome extension discussion" | Auto-recall doesn't search **episodes** |
-| "What did I say last Tuesday?" | Auto-recall may not apply **time filters** |
-| "Tell me everything about the Japan trip" | Need broader search with multiple memory types |
-| Auto-recalled `<memories>` don't answer the question | Need different query terms or types |
-
-### Query Crafting
-
-Be specific. Include names, dates, and topic keywords.
-
-```
-GOOD: "Arthur's Chrome extension project in March"
-BAD:  "that project"
-
-GOOD: "Caroline's birthday gift ideas"
-BAD:  "gift ideas"
-```
-
-### memory_types Selection
-
-| Goal | memory_types | Example query |
-|------|-------------|---------------|
-| Specific facts/events | `["event_log"]` | "What did I eat last Tuesday?" |
-| People/places/things | `["entity"]` | "Who is Caroline?" |
-| How things connect | `["relation"]` | "How do Arthur and Caroline know each other?" |
-| Full conversation context | `["episode"]` | "Summarize our Chrome extension discussion" |
-| Best general results | `["event_log", "entity", "relation"]` | "Tell me about the Japan trip" |
-| Broad exploratory | *(omit)* | When unsure what type to look for |
-
-### Time Filtering
-
-When the user mentions time, convert to ISO 8601 and pass `start_time`/`end_time`:
-
-- "last week" → 7 days ago to now
-- "in March 2025" → `2025-03-01` to `2025-03-31`
-- "yesterday" → yesterday 00:00 to 23:59
-
-### Parameters
-
-```
-mimir_search({
-  query: string,          // Required. Specific search query.
-  memory_types?: string[],// Optional. Filter: "event_log", "entity", "relation", "episode", "raw_doc", "foresight"
-  start_time?: string,    // Optional. ISO 8601 start.
-  end_time?: string,      // Optional. ISO 8601 end.
-  top_k?: number          // Optional. Max results (default 10, max 30).
-})
-```
-
-## When to Use mimir_store (vs relying on auto-capture)
-
-Auto-capture saves the full conversation after each session. Use mimir_store ONLY for:
-
-- **Explicit requests**: User says "remember that I prefer dark mode"
-- **Atomic facts worth highlighting**: Important preferences, decisions, or plans that might get buried in a long conversation
-
-Do NOT use mimir_store to save things the user already said in conversation — auto-capture handles that.
-
-```
-mimir_store({ content: "Arthur prefers dark roast coffee, no sugar." })
-```
-
-Keep content atomic — one fact per call. Include the person's name for attribution.
-
-## Using mimir_forget
-
-Preview memories matching a topic the user wants to forget. Deletion is NOT yet implemented — inform the user that you can show what's stored but cannot delete it yet.
-
-```
-mimir_forget({ query: "my old phone number" })
-```
-
-## Installation
-
-```bash
-# With invite code (closed beta, single-use)
-npx memory-mimir init --code XXXXXX
-
-# Or with existing API key
-npx memory-mimir setup --api-key sk-mimir-xxx
-```
-
-Restart the AI agent after setup.
+- ❌ "Let me search my memory for that" — just do it silently
+- ❌ "I found 3 results in my memory database" — just answer naturally
+- ❌ "I'll use mimir_search to look that up" — never expose tool names
+- ❌ Storing every single thing the user says — auto-capture handles it
+- ❌ Asking "would you like me to remember that?" for obvious facts — just remember
